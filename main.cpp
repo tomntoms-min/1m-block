@@ -15,11 +15,15 @@
 #include <fstream>
 #include <iostream>
 #include <unordered_set>
+#include <chrono>  // 시간 측정용
 
 // 블랙리스트 도메인 저장용 해시셋
 std::unordered_set<std::string> blacklist;
 
 void load_domains(const char* filename) {
+    // 시간 측정 시작
+    auto start_time = std::chrono::high_resolution_clock::now();
+    
     std::ifstream fin(filename);
     if (!fin) {
         std::cerr << "도메인 파일 열기 실패: " << filename << std::endl;
@@ -39,13 +43,38 @@ void load_domains(const char* filename) {
         }
     }
     fin.close();
+    
+    // 시간 측정 종료
+    auto end_time = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+    
     std::cout << "총 " << count << "개의 도메인 로드 완료" << std::endl;
+    std::cout << "도메인 로드 시간: " << duration.count() << " 밀리초" << std::endl;
     
     // 테스트 출력
     std::cout << "테스트 검색 - google.com: " 
               << (blacklist.find("google.com") != blacklist.end() ? "차단 대상" : "허용됨") << std::endl;
     std::cout << "테스트 검색 - facebook.com: " 
               << (blacklist.find("facebook.com") != blacklist.end() ? "차단 대상" : "허용됨") << std::endl;
+    
+    // 검색 시간 테스트
+    std::cout << "\n검색 시간 테스트:" << std::endl;
+    
+    // 존재하는 도메인 검색
+    std::string test_domain = "google.com";
+    auto search_start = std::chrono::high_resolution_clock::now();
+    bool result1 = blacklist.find(test_domain) != blacklist.end();
+    auto search_end = std::chrono::high_resolution_clock::now();
+    auto search_time = std::chrono::duration_cast<std::chrono::microseconds>(search_end - search_start);
+    std::cout << "존재하는 도메인 검색 시간(" << test_domain << "): " << search_time.count() << " 마이크로초" << std::endl;
+    
+    // 존재하지 않는 도메인 검색
+    test_domain = "nonexistent-domain-12345.com";
+    search_start = std::chrono::high_resolution_clock::now();
+    bool result2 = blacklist.find(test_domain) != blacklist.end();
+    search_end = std::chrono::high_resolution_clock::now();
+    search_time = std::chrono::duration_cast<std::chrono::microseconds>(search_end - search_start);
+    std::cout << "존재하지 않는 도메인 검색 시간(" << test_domain << "): " << search_time.count() << " 마이크로초" << std::endl;
 }
 
 /* 패킷 검사 함수 - 반환 값: ID(허용) 또는 0(차단) */
@@ -126,10 +155,17 @@ static int check_packet(struct nfq_data *tb)
     
     printf("검사 대상 호스트: %s\n", host);
     
-    // 블랙리스트 검사
-    if (blacklist.find(std::string(host)) != blacklist.end()) {
-        printf("차단 대상 발견: %s\n", host);
+    // 도메인 검색 시간 측정
+    auto search_start = std::chrono::high_resolution_clock::now();
+    bool is_blocked = blacklist.find(std::string(host)) != blacklist.end();
+    auto search_end = std::chrono::high_resolution_clock::now();
+    auto search_time = std::chrono::duration_cast<std::chrono::microseconds>(search_end - search_start);
+    
+    if (is_blocked) {
+        printf("차단 대상 발견: %s (검색 시간: %ld 마이크로초)\n", host, search_time.count());
         return 0; // 차단
+    } else {
+        printf("허용된 도메인: %s (검색 시간: %ld 마이크로초)\n", host, search_time.count());
     }
     
     return id; // 허용
@@ -196,6 +232,7 @@ int main(int argc, char** argv) {
     }
     
     printf("큐 생성\n");
+    // 큐 번호를 1로 변경해 볼 수 있습니다 (문제 발생 시)
     qh = nfq_create_queue(h, 0, &cb, NULL);
     if (!qh) {
         fprintf(stderr, "nfq_create_queue() 오류\n");
