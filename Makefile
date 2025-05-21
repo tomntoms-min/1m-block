@@ -1,6 +1,6 @@
 all: 1m-block
 
-1m-block: 1m-block.c
+1m-block: 1m-block.cpp
 	g++ -o main main.cpp -lnetfilter_queue
 
 clean:
